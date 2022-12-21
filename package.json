@@ -1,18 +1,33 @@
 {
   "name": "@tigrisdata/realtime",
   "version": "1.0.0",
-  "description": "",
-  "main": "dist/node/server.js",
-  "module": "dist/node/server.mjs",
+  "description": "Tigris Realtime",
+  "main": "dist/node/index.js",
   "browser": "dist/index.esm.js",
-  "types": "dist/server.d.ts",
+  "types": "dist/browser/index.d.ts",
   "scripts": {
     "ts-types": " tsc --emitDeclarationOnly --outDir dist",
-    "build": "rimraf dist && node ./esbuild.js && npm run ts-types"
+    "compile": "tsc --outDir dist",
+    "build": "rimraf dist && node ./esbuild.js && npm run compile"
   },
   "keywords": [],
-  "author": "",
-  "license": "MIT",
+  "author": "Tigris Data (https://www.tigrisdata.com/)",
+  "contributors": [
+    {
+      "name": "Garren Smith",
+      "email": "garren@tigrisdata.com"
+    }
+  ],
+  "license": "Apache-2.0",
+  "licenses": [
+    {
+      "type": "Apache-2.0",
+      "url": "http://www.apache.org/licenses/LICENSE-2.0"
+    }
+  ],
+  "files": [
+    "dist/**/*"
+  ],
   "devDependencies": {
     "esbuild": "^0.16.10",
     "rimraf": "^3.0.2",
