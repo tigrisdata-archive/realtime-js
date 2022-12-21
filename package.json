@@ -1,0 +1,24 @@
+{
+  "name": "@tigrisdata/realtime",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/node/server.js",
+  "module": "dist/node/server.mjs",
+  "browser": "dist/index.esm.js",
+  "types": "dist/server.d.ts",
+  "scripts": {
+    "ts-types": " tsc --emitDeclarationOnly --outDir dist",
+    "build": "rimraf dist && node ./esbuild.js && npm run ts-types"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "^0.16.10",
+    "rimraf": "^3.0.2",
+    "typescript": "^4.9.4"
+  },
+  "dependencies": {
+    "ws": "^8.11.0"
+  }
+}
