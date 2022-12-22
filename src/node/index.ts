@@ -1,11 +1,11 @@
 import platform from "../runtime/platform";
 import configure from "./platform";
-import { Realtime } from "../runtime/index";
+import { RealTime } from "../runtime/index";
 
 configure(platform);
 
 export function hello(where: string) {
   console.log("HELLO from", where);
 
-  let rt = new Realtime();
+  let rt = new RealTime({ platform });
 }
