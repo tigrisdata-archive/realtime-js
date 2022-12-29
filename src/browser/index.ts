@@ -7,5 +7,5 @@ configure(platform);
 export function hello(where: string) {
   console.log("HELLO from browser", where);
 
-  let rt = new RealTime({ platform });
+  // let rt = new RealTime({ platform,  });
 }
