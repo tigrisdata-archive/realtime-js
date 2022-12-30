@@ -46,7 +46,7 @@ export class WsTestServer {
 
   start() {
     this.wss.on("connection", (ws) => {
-      console.log("connection");
+      console.log("server: connected to client");
       this.connectionAttempts += 1;
       if (this._rejectConnectionsWith !== "") {
         let err = {
@@ -59,7 +59,7 @@ export class WsTestServer {
           event: encodeMsgPack(err),
         };
 
-        console.log("Sending error", msg);
+        console.log("server: Sending error", msg);
         ws.send(encodeMsgPack(msg));
         ws.close();
         return;
@@ -73,9 +73,8 @@ export class WsTestServer {
       } as proto.ConnectedEvent;
 
       ws.on("message", (data: Uint8Array) => {
-        // let msg = JSON.parse(data) as proto.RealTimeMessage;
         let msg = decodeMsgPack(data) as proto.RealTimeMessage;
-        console.log("server received: ", msg);
+        console.log("server: received: ", msg);
 
         this._history.push(msg);
 
@@ -94,16 +93,44 @@ export class WsTestServer {
           this.channelStream.delete(detach.channel);
         }
 
+        if (msg.eventType === proto.EventType.subscribe) {
+          let sub = decodeMsgPack(msg.event) as proto.SubscribeEvent;
+
+          let channelStream = this.channelStream.get(
+            sub.channel
+          ) as proto.MessageEvent[];
+
+          channelStream.forEach((msg) => {
+            if (msg.id > sub.position) {
+              let raw = encodeMsgPack(msg);
+              let rt = {
+                event: raw,
+                eventType: proto.EventType.message,
+              } as proto.RealTimeMessage;
+
+              ws.send(encodeMsgPack(rt));
+            }
+          });
+        }
+
         if (msg.eventType === proto.EventType.message) {
           const channelMsg = decodeMsgPack(msg.event) as proto.MessageEvent;
           channelMsg.id = getSeq();
+
           const channelStream = this.channelStream.get(
             channelMsg.channel
           ) as proto.MessageEvent[];
 
           channelStream.push(channelMsg);
 
-          this.clients.forEach((client) => client.send(data));
+          let publishMsg: proto.RealTimeMessage = {
+            eventType: proto.EventType.message,
+            event: encodeMsgPack(channelMsg),
+          };
+
+          this.clients.forEach((client) =>
+            client.send(encodeMsgPack(publishMsg))
+          );
         }
 
         if (msg.eventType === proto.EventType.heartbeat) {
@@ -116,7 +143,7 @@ export class WsTestServer {
         event: encodeMsgPack(connected),
       };
 
-      console.log("Sending connect", msg);
+      console.log("server: Sending connect", msg);
       ws.send(encodeMsgPack(msg));
     });
   }
@@ -142,9 +169,9 @@ export class WsTestServer {
   async close(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.wss.close((err) => {
-        console.log("closing server");
+        console.log("server: closing");
         if (err) {
-          console.log("ERR", err);
+          console.log("server: error", err);
           reject(err);
         } else {
           resolve();

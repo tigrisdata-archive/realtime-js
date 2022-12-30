@@ -1,10 +1,7 @@
 import { RealTime, Channel } from "../node/index";
 import { WsTestServer } from "./mock.server";
 import * as proto from "../proto/server/v1/realtime";
-
 // TODO:
-// 1. Subscribe recovery - last heard number
-// 3. Message queue for offline
 // 5. Http endpoints
 // 6. browser support
 // 7. presence
@@ -426,7 +423,69 @@ describe("realtime message send and receive with mock server", () => {
     expect(eventCount).toEqual(4);
   });
 
-  it.skip("recovers from disconnect", async () => {
+  it("queues up messages if not connectioned", async () => {
+    const realtime = new RealTime({
+      url: "ws://127.0.0.1:8084",
+      project: "testproject",
+      autoconnect: false,
+    });
+
+    try {
+      let ch = realtime.getChannel("testoffline");
+
+      let msgReceived = 0;
+      let done = new Promise<void>((resolve) => {
+        ch.subscribe("main", (msg) => {
+          msgReceived += 1;
+
+          if (msg === "msg3") {
+            resolve();
+          }
+        });
+      });
+
+      ch.publish("main", "msg1");
+      ch.publish("main", "msg2");
+      ch.publish("main", "msg3");
+
+      expect(server.history().length).toEqual(0);
+
+      await realtime.connect();
+      await done;
+
+      expect(msgReceived).toEqual(3);
+    } finally {
+      realtime.close();
+    }
+  });
+
+  it("sends subscribe on reconnect", async () => {
+    const realtime = new RealTime({
+      url: "ws://127.0.0.1:8084",
+      project: "testproject",
+    });
+
+    await realtime.once("connected");
+
+    try {
+      const ch1 = realtime.getChannel("one");
+
+      ch1.subscribe("main", (msg) => {
+        expect(msg).toEqual("msg1");
+      });
+
+      await waitForDelivery(ch1, "main", "msg1");
+      server.closeConnection(realtime.socketId() as string);
+      await realtime.once("connected");
+      await sleep(100);
+      let msg = server.history().pop();
+      expect(msg?.eventType).toEqual(proto.EventType.subscribe);
+    } finally {
+      realtime.close();
+    }
+  });
+
+  it("recovers from disconnect", async () => {
     const messages: string[] = [];
     const realtime = new RealTime({
       url: "ws://127.0.0.1:8084",
@@ -437,27 +496,34 @@ describe("realtime message send and receive with mock server", () => {
       project: "testproject",
     });
     try {
-      await realtime.connect();
-      await rt2.connect();
+      await realtime.once("connected");
+      await rt2.once("connected");
 
       const ch1 = realtime.getChannel("one");
       const otherCh1 = rt2.getChannel("one");
 
-      ch1.subscribe("main", (msg) => {
-        messages.push(msg);
+      let done = new Promise<void>((resolve) => {
+        ch1.subscribe("main", (msg) => {
+          messages.push(msg);
+
+          if (msg === "msg5") {
+            resolve();
+          }
+        });
       });
 
       otherCh1.attach();
 
       await waitForDelivery(otherCh1, "main", "msg1");
       server.closeConnection(realtime.socketId() as string);
-      await sleep(1001);
-      await waitForDelivery(otherCh1, "main", "msg2");
+      otherCh1.publish("main", "msg2");
+      otherCh1.publish("main", "msg3");
+      otherCh1.publish("main", "msg4");
+      otherCh1.publish("main", "msg5");
 
-      await sleep(100);
-
-      expect(messages.length).toEqual(2);
-      expect(messages[1]).toEqual("msg2");
+      await done;
+      console.log("messages", messages);
+      expect(messages).toEqual(["msg1", "msg2", "msg3", "msg4", "msg5"]);
     } finally {
       realtime.close();
       rt2.close();

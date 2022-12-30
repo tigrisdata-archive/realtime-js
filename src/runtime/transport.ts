@@ -15,10 +15,14 @@ import {
 import { EventEmitter } from "node:events";
 import * as proto from "../proto/server/v1/realtime";
 import Logger from "./logger";
+import { Newable } from "./ts_utils";
 
 type MessageEventListener = (MessageEvent: proto.MessageEvent) => void;
 
-export type Newable<T> = { new (...args: any[]): T };
+class ChannelState {
+  listeners: MessageEventListener[] = [];
+  position: string = "";
+}
 
 interface TransportConfig {
   heartbeatTimeout: number;
@@ -44,11 +48,6 @@ type ConnectionState =
 
 export type ConnectError = proto.ErrorEvent;
 
-export declare interface Transport {
-  on(event: "error", listener: (error: ConnectError) => void): this;
-  on(event: ConnectionEvent, listener: () => void): this;
-}
-
 export type ConnectionEventFn = () => void;
 export type ConnectionErrorFn = (error: ConnectError) => void;
 
@@ -59,10 +58,13 @@ export type ConnectionEvent =
   | "closing"
   | "closed";
 
-export type Connection = Pick<Transport, "on" | "off" | "once">;
+export declare interface Transport {
+  on(event: "error", listener: (error: ConnectError) => void): this;
+  on(event: ConnectionEvent, listener: () => void): this;
+}
 
 export class Transport extends EventEmitter {
-  private channelListeners: Map<string, MessageEventListener[]>;
+  private channelsState: Map<string, ChannelState>;
   private ws: WebSocket;
   private session?: Session;
   private _connectionState: ConnectionState = "uninitialized";
@@ -74,14 +76,21 @@ export class Transport extends EventEmitter {
   private connectionRetries = 0;
   private logger: Logger;
   private reconnectId: number | NodeJS.Timeout = 0;
+  private msgQueue: (Uint8Array | string)[] = [];
 
   constructor(config: TransportConfig) {
     super();
 
     this.config = config;
     this.logger = config.logger;
-    this.channelListeners = new Map();
+    this.channelsState = new Map();
     this.encoding = Encoding.msgpack;
+
+    this.on("connected", () => {
+      this.logger.debug("sending stored messages and resubscribes");
+      this.reconnectChannels();
+      this.sendQueuedMessages();
+    });
 
     if (config.autoconnect) {
       this.establishConnection();
@@ -114,13 +123,14 @@ export class Transport extends EventEmitter {
 
     // this.ws.onopen = () => this.restartHeartbeat();
     // @ts-ignore
-    this.ws.onerror = (err) => this.onError(err.message);
+    // this.ws.onerror = (err) => this.onError(err.message);
     this.ws.onclose = (_event) => this.onClose();
     this.ws.onmessage = (msg: MessageEvent<Uint8Array>) =>
       this.onMessage(msg.data);
   }
 
   onClose() {
+    this.logger.debug("server connection closed");
     this.clearHearbeat();
     if (this._connectionState === "closing") {
       this.setConnectionState("closed");
@@ -154,7 +164,7 @@ export class Transport extends EventEmitter {
   onMessage(data: Uint8Array) {
     const msg = toRealTimeMessage(this.encoding, data);
 
-    this.logger.debug("message recieved", msg.eventType);
+    this.logger.debug("message received", msg.eventType);
 
     switch (msg.eventType) {
       case proto.EventType.ack:
@@ -192,9 +202,25 @@ export class Transport extends EventEmitter {
     );
   }
 
-  send(msg: string | Uint8Array) {
-    this.restartHeartbeat();
-    this.ws.send(msg);
+  send(msg: string | Uint8Array, saveOffline = false) {
+    if (this._connectionState !== "connected" && saveOffline) {
+      this.msgQueue.push(msg);
+    } else {
+      this.restartHeartbeat();
+      try {
+        this.ws.send(msg);
+      } catch (error) {
+        let message;
+        if (error instanceof Error) message = error.message;
+        else message = String(error);
+
+        if (/WebSocket is not open/.test(message) && saveOffline) {
+          this.msgQueue.push(msg);
+        }
+
+        this.logger.error(message);
+      }
+    }
   }
 
   sendHeartbeat() {
@@ -205,7 +231,7 @@ export class Transport extends EventEmitter {
 
   sendDisconnect() {
     this.logger.debug("sending disconnect");
-    this.ws.send(createDisconnectEvent(this.encoding));
+    this.send(createDisconnectEvent(this.encoding));
   }
 
   connectionState(): ConnectionState {
@@ -213,60 +239,78 @@ export class Transport extends EventEmitter {
   }
 
   handleChannelMessage(msg: proto.MessageEvent) {
-    const listeners = this.channelListeners.get(msg.channel);
+    const channelState = this.channelsState.get(msg.channel);
 
-    if (!listeners) {
+    if (!channelState) {
+      let error = {
+        code: 0,
+        message: `received msg for channel ${msg.channel} that doesn't exist`,
+      };
+      this.logger.error(error.message);
+      this.emit("error", error);
       return;
     }
 
-    listeners.forEach((listener) => listener(msg));
+    channelState.position = msg.id;
+    channelState.listeners.forEach((listener) => listener(msg));
   }
 
   listen(channelName: string, listener: MessageEventListener) {
-    if (!this.channelListeners.has(channelName)) {
-      this.channelListeners.set(channelName, []);
+    if (!this.channelsState.has(channelName)) {
+      this.channelsState.set(channelName, new ChannelState());
     }
 
-    const channelListeners = this.channelListeners.get(channelName);
+    const channelState = this.channelsState.get(channelName);
 
-    if (!channelListeners) {
+    if (!channelState) {
       return;
     }
 
-    channelListeners.push(listener);
+    channelState.listeners.push(listener);
   }
 
   attach(channelName: string) {
     this.logger.debug("sending attach from ", channelName);
-    this.ws.send(createAttachEvent(this.encoding, channelName));
+    this.send(createAttachEvent(this.encoding, channelName));
   }
 
   detach(channelName: string) {
     this.logger.debug("sending detach");
-    this.ws.send(createDetachEvent(this.encoding, channelName));
+    this.send(createDetachEvent(this.encoding, channelName));
   }
 
   subscribe(channelName: string, name: string, position: string) {
     this.logger.debug("sending subscribe", channelName);
-    this.ws.send(
-      createSubscribeEvent(this.encoding, channelName, name, position)
-    );
+    this.send(createSubscribeEvent(this.encoding, channelName, name, position));
   }
 
   unsubscribe(channelName: string) {
     this.logger.debug("sending unsubscribe", channelName);
-    this.ws.send(createUnsubscribeEvent(this.encoding, channelName));
+    this.send(createUnsubscribeEvent(this.encoding, channelName));
   }
 
   async publish(channel: string, name: string, message: string) {
     this.logger.debug("publish msg", channel, name, message);
     const msg = createMessageEvent(this.encoding, channel, name, message);
-    this.send(msg);
+    this.send(msg, true);
   }
 
   // Returns the connection session socket id
   socketId(): string | undefined {
     return this.session?.sessionId;
+  }
+
+  reconnectChannels() {
+    this.channelsState.forEach((state, name) => {
+      this.attach(name);
+      this.subscribe(name, "", state.position);
+    });
+  }
+
+  sendQueuedMessages() {
+    this.msgQueue.forEach((msg) => {
+      this.send(msg, true);
+    });
   }
 
   close() {

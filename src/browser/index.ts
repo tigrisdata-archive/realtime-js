@@ -1,11 +1,12 @@
 import platform from "../runtime/platform";
 import configure from "./platform";
-import { RealTime } from "../runtime/index";
+import { RealTime as RT, RealTimeConfig } from "../runtime/index";
+export { Channel } from "../runtime/index";
 
 configure(platform);
 
-export function hello(where: string) {
-  console.log("HELLO from browser", where);
-
-  // let rt = new RealTime({ platform,  });
+export class RealTime extends RT {
+  constructor(options: RealTimeConfig) {
+    super({ ...options, platform });
+  }
 }
