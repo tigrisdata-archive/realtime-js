@@ -12,10 +12,12 @@ import {
   createDetachEvent,
   createUnsubscribeEvent,
 } from "./messages";
-import { EventEmitter } from "node:events";
+import { EventEmitter } from "eventemitter3";
 import * as proto from "../proto/server/v1/realtime";
 import Logger from "./logger";
 import { Newable } from "./ts_utils";
+
+import { decode as decodeMsgPack } from "@msgpack/msgpack";
 
 type MessageEventListener = (MessageEvent: proto.MessageEvent) => void;
 
@@ -32,9 +34,14 @@ interface TransportConfig {
   autoconnect: boolean;
 }
 
-interface Session {
+class Session {
   sessionId: string;
   socketId: string;
+
+  constructor(connected: proto.ConnectedEvent) {
+    this.sessionId = connected.session_id;
+    this.socketId = connected.socket_id;
+  }
 }
 
 type ConnectionState =
@@ -111,7 +118,8 @@ export class Transport extends EventEmitter {
   }
 
   establishConnection() {
-    let params = `user-agent=FIX_ME&protocol=1&msg-encoding=${this.encoding}`;
+    const encoding = this.encoding === Encoding.msgpack ? "msgpack" : "json";
+    let params = `user-agent=FIX_ME&protocol=1&encoding=${encoding}`;
     if (this.session?.sessionId) {
       params += `&sessionId=${this.session.sessionId}&`;
     }
@@ -161,21 +169,25 @@ export class Transport extends EventEmitter {
     this.emit("error", { code: null, message: err });
   }
 
-  onMessage(data: Uint8Array) {
-    const msg = toRealTimeMessage(this.encoding, data);
+  onMessage(data: ArrayBuffer) {
+    const msg = toRealTimeMessage(this.encoding, data as Uint8Array);
 
-    this.logger.debug("message received", msg.eventType);
+    this.logger.debug("message received", msg.event_type);
 
-    switch (msg.eventType) {
+    switch (msg.event_type) {
       case proto.EventType.ack:
         return;
       case proto.EventType.connected:
-        this.session = toConnectedEvent(this.encoding, msg.event);
+        this.session = new Session(toConnectedEvent(this.encoding, msg.event));
+        this.logger.debug("connected as", this.session);
         this.setConnectionState("connected");
         this.connectionRetries = 0;
         this.restartHeartbeat();
         return;
       case proto.EventType.heartbeat:
+        return;
+      case proto.EventType.subscribed:
+        this.logger.info("subscribed");
         return;
       case proto.EventType.message:
         let channelMsg = toMessageEvent(this.encoding, msg.event);
@@ -187,7 +199,7 @@ export class Transport extends EventEmitter {
         this.logger.error("recieved ", error);
         return;
       default:
-        throw new Error(`unknown message type ${msg.eventType}`);
+        throw new Error(`unknown message type ${msg.event_type}`);
     }
   }
 

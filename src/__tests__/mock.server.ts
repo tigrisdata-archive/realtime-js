@@ -55,7 +55,7 @@ export class WsTestServer {
         } as proto.ErrorEvent;
 
         let msg: proto.RealTimeMessage = {
-          eventType: proto.EventType.error,
+          event_type: proto.EventType.error,
           event: encodeMsgPack(err),
         };
 
@@ -68,8 +68,8 @@ export class WsTestServer {
       let socketId = getSocketId();
       this.clients.set(socketId, ws);
       let connected = {
-        socketId,
-        sessionId: getSessionId(),
+        socket_id: socketId,
+        session_id: getSessionId(),
       } as proto.ConnectedEvent;
 
       ws.on("message", (data: Uint8Array) => {
@@ -78,7 +78,8 @@ export class WsTestServer {
 
         this._history.push(msg);
 
-        if (msg.eventType === proto.EventType.attach) {
+        console.log("HIH", msg.event_type === proto.EventType.attach);
+        if (msg.event_type === proto.EventType.attach) {
           let attachEvent = decodeMsgPack(msg.event) as proto.AttachEvent;
 
           if (!this.channelStream.has(attachEvent.channel)) {
@@ -86,14 +87,14 @@ export class WsTestServer {
           }
         }
 
-        if (msg.eventType === proto.EventType.detach) {
+        if (msg.event_type === proto.EventType.detach) {
           let detach = decodeMsgPack(msg.event) as proto.DetachEvent;
           // The server should only remove the channel stream if there are no more devices
           // that are attached to the stream. This is a test server so this is fine
           this.channelStream.delete(detach.channel);
         }
 
-        if (msg.eventType === proto.EventType.subscribe) {
+        if (msg.event_type === proto.EventType.subscribe) {
           let sub = decodeMsgPack(msg.event) as proto.SubscribeEvent;
 
           let channelStream = this.channelStream.get(
@@ -105,7 +106,7 @@ export class WsTestServer {
               let raw = encodeMsgPack(msg);
               let rt = {
                 event: raw,
-                eventType: proto.EventType.message,
+                event_type: proto.EventType.message,
               } as proto.RealTimeMessage;
 
               ws.send(encodeMsgPack(rt));
@@ -113,7 +114,7 @@ export class WsTestServer {
           });
         }
 
-        if (msg.eventType === proto.EventType.message) {
+        if (msg.event_type === proto.EventType.message) {
           const channelMsg = decodeMsgPack(msg.event) as proto.MessageEvent;
           channelMsg.id = getSeq();
 
@@ -124,7 +125,7 @@ export class WsTestServer {
           channelStream.push(channelMsg);
 
           let publishMsg: proto.RealTimeMessage = {
-            eventType: proto.EventType.message,
+            event_type: proto.EventType.message,
             event: encodeMsgPack(channelMsg),
           };
 
@@ -133,13 +134,13 @@ export class WsTestServer {
           );
         }
 
-        if (msg.eventType === proto.EventType.heartbeat) {
+        if (msg.event_type === proto.EventType.heartbeat) {
           ws.send(data);
         }
       });
 
       let msg: proto.RealTimeMessage = {
-        eventType: proto.EventType.connected,
+        event_type: proto.EventType.connected,
         event: encodeMsgPack(connected),
       };
 

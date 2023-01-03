@@ -1,4 +1,4 @@
-import { EventEmitter } from "node:events";
+import { EventEmitter } from "eventemitter3";
 import { Transport } from "./transport";
 import { MessageEvent } from "../proto/server/v1/realtime";
 import Logger from "./logger";

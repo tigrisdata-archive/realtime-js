@@ -20,7 +20,12 @@ export function toMessageEvent(
   encoding: Encoding,
   event: Uint8Array
 ): proto.MessageEvent {
-  return decodeMsg(encoding, event);
+  let m = decodeMsg(encoding, event) as proto.MessageEvent;
+
+  return {
+    ...m,
+    data: decodeMsg(encoding, m.data),
+  };
 }
 
 export function toErrorEvent(
@@ -36,11 +41,12 @@ export function createMessageEvent(
   name: string,
   message: string
 ) {
+  const encoder = new TextEncoder();
+  //@ts-ignore
   const msg: proto.MessageEvent = {
     channel,
     name,
-    //@ts-ignore
-    data: message,
+    data: encodeMsg(encoding, message) as Uint8Array,
   };
 
   return createRTMessage(
@@ -51,11 +57,19 @@ export function createMessageEvent(
 }
 
 export function createHeartbeatEvent(encoding: Encoding) {
-  return createRTMessage(encoding, proto.EventType.heartbeat, "");
+  return createRTMessage(encoding, proto.EventType.heartbeat, new Uint8Array());
 }
 
 export function createDisconnectEvent(encoding: Encoding) {
-  return createRTMessage(encoding, proto.EventType.disconnect, "");
+  const disconnect: proto.DisconnectEvent = {
+    channel: "",
+  };
+
+  return createRTMessage(
+    encoding,
+    proto.EventType.disconnect,
+    encodeMsg(encoding, disconnect)
+  );
 }
 
 export function createAttachEvent(encoding: Encoding, channel: string) {
@@ -115,13 +129,13 @@ export function createSubscribeEvent(
 
 export function createRTMessage(
   encoding: Encoding,
-  eventType: proto.EventType,
+  event_type: proto.EventType,
   event: string | Uint8Array
 ) {
   const rt = {
-    eventType,
+    event_type,
     event,
-  };
+  } as proto.RealTimeMessage;
 
   return encodeMsg(encoding, rt);
 }

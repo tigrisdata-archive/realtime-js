@@ -1,6 +1,7 @@
 import { RealTime, Channel } from "../node/index";
 import { WsTestServer } from "./mock.server";
 import * as proto from "../proto/server/v1/realtime";
+import { LogLevel } from "../runtime/logger";
 // TODO:
 // 5. Http endpoints
 // 6. browser support
@@ -34,7 +35,7 @@ describe("realtime message send and receive with mock server", () => {
       })
     );
     let a: proto.RealTimeMessage = {
-      eventType: proto.EventType.connected,
+      event_type: proto.EventType.connected,
       event,
     };
 
@@ -63,7 +64,7 @@ describe("realtime message send and receive with mock server", () => {
         await sleep(100);
         let lastMsg = server.history().pop() as proto.RealTimeMessage;
         console.log("last mesg", lastMsg);
-        expect(lastMsg.eventType).toEqual(proto.EventType.attach);
+        expect(lastMsg.event_type).toEqual(proto.EventType.attach);
 
         done();
       });
@@ -90,8 +91,8 @@ describe("realtime message send and receive with mock server", () => {
         const sub = hist.pop() as proto.RealTimeMessage;
         const attach = hist.pop() as proto.RealTimeMessage;
 
-        expect(attach.eventType).toEqual(proto.EventType.attach);
-        expect(sub.eventType).toEqual(proto.EventType.subscribe);
+        expect(attach.event_type).toEqual(proto.EventType.attach);
+        expect(sub.event_type).toEqual(proto.EventType.subscribe);
 
         done();
       });
@@ -122,10 +123,10 @@ describe("realtime message send and receive with mock server", () => {
         let totalAttach = 0;
         let totalSubs = 0;
         server.history().forEach((msg) => {
-          if (msg.eventType === proto.EventType.attach) {
+          if (msg.event_type === proto.EventType.attach) {
             totalAttach += 1;
           }
-          if (msg.eventType === proto.EventType.subscribe) {
+          if (msg.event_type === proto.EventType.subscribe) {
             totalSubs += 1;
           }
         });
@@ -158,8 +159,8 @@ describe("realtime message send and receive with mock server", () => {
         const detach = hist.pop() as proto.RealTimeMessage;
         const attach = hist.pop() as proto.RealTimeMessage;
 
-        expect(attach.eventType).toEqual(proto.EventType.attach);
-        expect(detach.eventType).toEqual(proto.EventType.detach);
+        expect(attach.event_type).toEqual(proto.EventType.attach);
+        expect(detach.event_type).toEqual(proto.EventType.detach);
 
         done();
       });
@@ -190,9 +191,9 @@ describe("realtime message send and receive with mock server", () => {
         const sub = server.history().pop() as proto.RealTimeMessage;
         const attach = server.history().pop() as proto.RealTimeMessage;
 
-        expect(attach.eventType).toEqual(proto.EventType.attach);
-        expect(sub.eventType).toEqual(proto.EventType.subscribe);
-        expect(unsub.eventType).toEqual(proto.EventType.unsubscribe);
+        expect(attach.event_type).toEqual(proto.EventType.attach);
+        expect(sub.event_type).toEqual(proto.EventType.subscribe);
+        expect(unsub.event_type).toEqual(proto.EventType.unsubscribe);
 
         ch.subscribe("test", cb);
         ch.unsubscribeAll("test");
@@ -201,8 +202,8 @@ describe("realtime message send and receive with mock server", () => {
 
         const unsub1 = server.history().pop() as proto.RealTimeMessage;
         const sub1 = server.history().pop() as proto.RealTimeMessage;
-        expect(sub1.eventType).toEqual(proto.EventType.subscribe);
-        expect(unsub1.eventType).toEqual(proto.EventType.unsubscribe);
+        expect(sub1.event_type).toEqual(proto.EventType.subscribe);
+        expect(unsub1.event_type).toEqual(proto.EventType.unsubscribe);
         done();
       });
     } finally {
@@ -232,9 +233,9 @@ describe("realtime message send and receive with mock server", () => {
         const sub = server.history().pop() as proto.RealTimeMessage;
         const attach = server.history().pop() as proto.RealTimeMessage;
 
-        expect(attach.eventType).toEqual(proto.EventType.attach);
-        expect(sub.eventType).toEqual(proto.EventType.subscribe);
-        expect(unsub.eventType).toEqual(proto.EventType.unsubscribe);
+        expect(attach.event_type).toEqual(proto.EventType.attach);
+        expect(sub.event_type).toEqual(proto.EventType.subscribe);
+        expect(unsub.event_type).toEqual(proto.EventType.unsubscribe);
 
         ch.subscribe("test", (msg) => {
           expect(msg).toEqual("sent message!");
@@ -249,27 +250,25 @@ describe("realtime message send and receive with mock server", () => {
   });
 
   it("can send and receive", async () => {
-    await sleep(1000);
     const realtime = new RealTime({
       url: "ws://127.0.0.1:8084",
-      project: "testproject",
+      project: "p1",
     });
     try {
       await realtime.once("connected");
+      const channel1 = realtime.getChannel(`test-one-${Date.now()}`);
+      channel1.attach();
       await new Promise<void>(async (done) => {
-        const channel1 = realtime.getChannel("test-one");
-
         channel1.subscribe("greeting", (message) => {
           expect(message).toEqual("hello world");
           expect(
-            (server.history().pop() as proto.RealTimeMessage).eventType
+            (server.history().pop() as proto.RealTimeMessage).event_type
           ).toEqual(proto.EventType.message);
-
           done();
         });
-
         await channel1.publish("greeting", "hello world");
       });
+      await sleep(1000);
     } finally {
       realtime.close();
     }
@@ -362,7 +361,7 @@ describe("realtime message send and receive with mock server", () => {
       await sleep(1500);
       let msg = server.history().pop() as proto.RealTimeMessage;
 
-      expect(msg.eventType).toEqual(proto.EventType.heartbeat);
+      expect(msg.event_type).toEqual(proto.EventType.heartbeat);
     } finally {
       realtime.close();
     }
@@ -379,7 +378,7 @@ describe("realtime message send and receive with mock server", () => {
       await sleep(100);
       let msg = server.history().pop() as proto.RealTimeMessage;
 
-      expect(msg.eventType).toEqual(proto.EventType.disconnect);
+      expect(msg.event_type).toEqual(proto.EventType.disconnect);
     } finally {
       realtime.close();
     }
@@ -479,7 +478,7 @@ describe("realtime message send and receive with mock server", () => {
       await realtime.once("connected");
       await sleep(100);
       let msg = server.history().pop();
-      expect(msg?.eventType).toEqual(proto.EventType.subscribe);
+      expect(msg?.event_type).toEqual(proto.EventType.subscribe);
     } finally {
       realtime.close();
     }

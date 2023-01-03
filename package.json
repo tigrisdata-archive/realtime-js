@@ -45,6 +45,7 @@
   },
   "dependencies": {
     "@msgpack/msgpack": "^2.8.0",
+    "eventemitter3": "^5.0.0",
     "ws": "^8.11.0"
   }
 }

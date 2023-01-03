@@ -1,5 +1,5 @@
 import { Platform } from "./platform";
-import { EventEmitter } from "node:events";
+import { EventEmitter } from "eventemitter3";
 import {
   Transport,
   ConnectionEvent,
