@@ -2,6 +2,7 @@ import { RealTime, Channel } from "../node/index";
 import { WsTestServer } from "./mock.server";
 import * as proto from "../proto/server/v1/realtime";
 import { LogLevel } from "../runtime/logger";
+import { Encoding } from "../runtime";
 // TODO:
 // 5. Http endpoints
 // 6. browser support
@@ -19,36 +20,6 @@ describe("realtime message send and receive with mock server", () => {
     await server.close();
   });
 
-  it.skip("json encoding", async () => {
-    function stringToUint8Array(input: string): Uint8Array {
-      return new TextEncoder().encode(input);
-    }
-
-    function uint8ArrayToString(input: Uint8Array): string {
-      return new TextDecoder().decode(input);
-    }
-
-    let event = stringToUint8Array(
-      JSON.stringify({
-        socketId: "1",
-        session: "ssss",
-      })
-    );
-    let a: proto.RealTimeMessage = {
-      event_type: proto.EventType.connected,
-      event,
-    };
-
-    let z = stringToUint8Array(JSON.stringify(a));
-
-    let x = JSON.parse(uint8ArrayToString(z)) as proto.RealTimeMessage;
-
-    console.log("xx", x);
-
-    let c = JSON.parse(uint8ArrayToString(x.event)) as proto.ConnectedEvent;
-    console.log("zx", c);
-  });
-
   it("should send attach to server", async () => {
     const realtime = new RealTime({
       url: "ws://127.0.0.1:8084",
@@ -63,7 +34,6 @@ describe("realtime message send and receive with mock server", () => {
 
         await sleep(100);
         let lastMsg = server.history().pop() as proto.RealTimeMessage;
-        console.log("last mesg", lastMsg);
         expect(lastMsg.event_type).toEqual(proto.EventType.attach);
 
         done();
@@ -155,7 +125,6 @@ describe("realtime message send and receive with mock server", () => {
         ch.detach();
         await sleep(100);
         const hist = server.history();
-        console.log("hist", hist);
         const detach = hist.pop() as proto.RealTimeMessage;
         const attach = hist.pop() as proto.RealTimeMessage;
 
@@ -179,9 +148,7 @@ describe("realtime message send and receive with mock server", () => {
       await new Promise<void>(async (done) => {
         let ch = realtime.getChannel("test-one");
 
-        let cb = (data) => {
-          console.log(data);
-        };
+        let cb = (_data) => {};
         ch.subscribe("test", cb);
         ch.unsubscribe("test", cb);
 
@@ -221,9 +188,7 @@ describe("realtime message send and receive with mock server", () => {
       await new Promise<void>(async (done) => {
         let ch = realtime.getChannel("test-one");
 
-        let cb = (data) => {
-          console.log(data);
-        };
+        let cb = (_data) => {};
         ch.subscribe("test", cb);
         ch.unsubscribe("test", cb);
 
@@ -253,20 +218,23 @@ describe("realtime message send and receive with mock server", () => {
     const realtime = new RealTime({
       url: "ws://127.0.0.1:8084",
       project: "p1",
+      encoding: Encoding.msgpack,
     });
     try {
       await realtime.once("connected");
       const channel1 = realtime.getChannel(`test-one-${Date.now()}`);
+      // const channel1 = realtime.getChannel(`test`);
       channel1.attach();
       await new Promise<void>(async (done) => {
         channel1.subscribe("greeting", (message) => {
-          expect(message).toEqual("hello world");
+          expect(message.text).toEqual("hello world");
+          expect(message.value).toEqual(1);
           expect(
             (server.history().pop() as proto.RealTimeMessage).event_type
           ).toEqual(proto.EventType.message);
           done();
         });
-        await channel1.publish("greeting", "hello world");
+        await channel1.publish("greeting", { text: "hello world", value: 1 });
       });
       await sleep(1000);
     } finally {
@@ -521,7 +489,6 @@ describe("realtime message send and receive with mock server", () => {
       otherCh1.publish("main", "msg5");
 
       await done;
-      console.log("messages", messages);
       expect(messages).toEqual(["msg1", "msg2", "msg3", "msg4", "msg5"]);
     } finally {
       realtime.close();

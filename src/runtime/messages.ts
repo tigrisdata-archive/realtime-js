@@ -3,6 +3,7 @@ import {
   encode as encodeMsgPack,
   decode as decodeMsgPack,
 } from "@msgpack/msgpack";
+import { jsonFromBase64 } from "./utils";
 
 export enum Encoding {
   msgpack,
@@ -20,11 +21,20 @@ export function toMessageEvent(
   encoding: Encoding,
   event: Uint8Array
 ): proto.MessageEvent {
-  let m = decodeMsg(encoding, event) as proto.MessageEvent;
+  let msgEvent = decodeMsg(encoding, event) as proto.MessageEvent;
+
+  let data = msgEvent.data;
+
+  if (encoding === Encoding.json) {
+    // []bytes are encoded as base64 strings for json
+    data = jsonFromBase64(msgEvent.data as unknown as string);
+  } else {
+    data = decodeMsg(Encoding.msgpack, msgEvent.data);
+  }
 
   return {
-    ...m,
-    data: decodeMsg(encoding, m.data),
+    ...msgEvent,
+    data,
   };
 }
 
@@ -39,9 +49,8 @@ export function createMessageEvent(
   encoding: Encoding,
   channel: string,
   name: string,
-  message: string
+  message: any
 ) {
-  const encoder = new TextEncoder();
   //@ts-ignore
   const msg: proto.MessageEvent = {
     channel,
@@ -131,44 +140,47 @@ export function createRTMessage(
   encoding: Encoding,
   event_type: proto.EventType,
   event: string | Uint8Array
-) {
+): Uint8Array | string {
   const rt = {
     event_type,
-    event,
+    event: event,
   } as proto.RealTimeMessage;
 
-  return encodeMsg(encoding, rt);
+  return encodeMsg(encoding, rt, encoding === Encoding.json);
 }
 
 export function toRealTimeMessage(
   encoding: Encoding,
-  data: string | Uint8Array
+  data: string | ArrayLike<number>
 ): proto.RealTimeMessage {
-  if (typeof data === "string") {
-    console.log("ss", JSON.parse(data));
-    return JSON.parse(data);
-  } else {
-  }
-  return proto.RealTimeMessage.fromJSON(
-    decodeMsg(encoding, data as Uint8Array)
-  );
+  return decodeMsg(encoding, data) as proto.RealTimeMessage;
 }
 
-function decodeMsg(encoding: Encoding, data: Uint8Array): any {
+function decodeMsg(encoding: Encoding, data: string | ArrayLike<number>): any {
   switch (encoding) {
     case Encoding.json:
-      return JSON.parse(String(data));
+      if (typeof data === "string") {
+        return JSON.parse(data as string);
+      }
+      return data;
     case Encoding.msgpack:
-      return decodeMsgPack(data);
+      return decodeMsgPack(data as ArrayLike<number>);
     default:
       throw new Error("only json and msgpack encoding supported");
   }
 }
 
-function encodeMsg(encoding: Encoding, msg: any): string | Uint8Array {
+function encodeMsg(
+  encoding: Encoding,
+  msg: any,
+  stringify: boolean = false
+): Uint8Array | string | any {
   switch (encoding) {
     case Encoding.json:
-      return JSON.stringify(msg);
+      if (stringify) {
+        return JSON.stringify(msg) as string;
+      }
+      return msg;
     case Encoding.msgpack:
       return encodeMsgPack(msg);
     default:

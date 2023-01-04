@@ -15,9 +15,7 @@ import {
 import { EventEmitter } from "eventemitter3";
 import * as proto from "../proto/server/v1/realtime";
 import Logger from "./logger";
-import { Newable } from "./ts_utils";
-
-import { decode as decodeMsgPack } from "@msgpack/msgpack";
+import { Newable } from "./utils";
 
 type MessageEventListener = (MessageEvent: proto.MessageEvent) => void;
 
@@ -32,6 +30,7 @@ interface TransportConfig {
   url: string;
   logger: Logger;
   autoconnect: boolean;
+  encoding: Encoding;
 }
 
 class Session {
@@ -91,7 +90,7 @@ export class Transport extends EventEmitter {
     this.config = config;
     this.logger = config.logger;
     this.channelsState = new Map();
-    this.encoding = Encoding.msgpack;
+    this.encoding = config.encoding;
 
     this.on("connected", () => {
       this.logger.debug("sending stored messages and resubscribes");
@@ -169,8 +168,8 @@ export class Transport extends EventEmitter {
     this.emit("error", { code: null, message: err });
   }
 
-  onMessage(data: ArrayBuffer) {
-    const msg = toRealTimeMessage(this.encoding, data as Uint8Array);
+  onMessage(data: ArrayLike<number> | string) {
+    const msg = toRealTimeMessage(this.encoding, data);
 
     this.logger.debug("message received", msg.event_type);
 
@@ -214,7 +213,7 @@ export class Transport extends EventEmitter {
     );
   }
 
-  send(msg: string | Uint8Array, saveOffline = false) {
+  send(msg: Uint8Array | string, saveOffline = false) {
     if (this._connectionState !== "connected" && saveOffline) {
       this.msgQueue.push(msg);
     } else {
@@ -301,7 +300,7 @@ export class Transport extends EventEmitter {
     this.send(createUnsubscribeEvent(this.encoding, channelName));
   }
 
-  async publish(channel: string, name: string, message: string) {
+  async publish(channel: string, name: string, message: any) {
     this.logger.debug("publish msg", channel, name, message);
     const msg = createMessageEvent(this.encoding, channel, name, message);
     this.send(msg, true);

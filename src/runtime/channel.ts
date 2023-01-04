@@ -67,7 +67,7 @@ export class Channel extends EventEmitter {
     }
   }
 
-  async publish(msgName: string, data: string) {
+  async publish(msgName: string, data: any) {
     await this.transport.publish(this.name, msgName, data);
   }
 

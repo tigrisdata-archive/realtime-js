@@ -78,7 +78,6 @@ export class WsTestServer {
 
         this._history.push(msg);
 
-        console.log("HIH", msg.event_type === proto.EventType.attach);
         if (msg.event_type === proto.EventType.attach) {
           let attachEvent = decodeMsgPack(msg.event) as proto.AttachEvent;
 

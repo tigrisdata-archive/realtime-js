@@ -8,8 +8,10 @@ import {
 } from "./transport";
 import Logger, { LogLevel } from "./logger";
 import { Channel, ChannelManager } from "./channel";
+import { Encoding } from "./messages";
 
 export { Channel } from "./channel";
+export { Encoding } from "./messages";
 
 export interface RealTimeConfigInternal {
   /*
@@ -22,6 +24,7 @@ export interface RealTimeConfigInternal {
   project: string;
   loglevel?: LogLevel;
   autoconnect?: boolean;
+  encoding?: Encoding;
 }
 
 export type RealTimeConfig = Omit<RealTimeConfigInternal, "platform">;
@@ -36,6 +39,7 @@ export class RealTime {
       {
         autoconnect: true,
         loglevel: LogLevel.error,
+        encoding: Encoding.msgpack,
       },
       config
     );
@@ -47,6 +51,7 @@ export class RealTime {
       url: `${config.url}/v1/projects/${config.project}/realtime`,
       logger: this.logger,
       autoconnect: this._config.autoconnect,
+      encoding: this._config.encoding,
     });
 
     this.channelManager = new ChannelManager(this.transport, this.logger);
