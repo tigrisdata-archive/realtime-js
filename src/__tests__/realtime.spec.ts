@@ -163,7 +163,7 @@ describe("realtime message send and receive with mock server", () => {
         expect(unsub.event_type).toEqual(proto.EventType.unsubscribe);
 
         ch.subscribe("test", cb);
-        ch.unsubscribeAll("test");
+        ch.unsubscribeAll();
 
         await sleep(100);
 
@@ -303,13 +303,42 @@ describe("realtime message send and receive with mock server", () => {
       const channel1 = realtime.getChannel("test-one");
 
       channel1.subscribe("ch1", (_) => (messageCount += 1));
+      channel1.subscribe("ch2", (_) => (messageCount += 1));
+      channel1.subscribe("ch1", (_) => (messageCount += 1));
+      channel1.subscribe("ch2", (_) => (messageCount += 1));
+
+      await waitForDelivery(channel1, "ch1", "msg1");
+      await waitForDelivery(channel1, "ch2", "msgForCh2");
+
+      channel1.unsubscribeAll();
+
+      await waitForDelivery(channel1, "ch1", "msg2");
+      await waitForDelivery(channel1, "ch2", "msgForCh2Again");
+
+      expect(messageCount).toEqual(4);
+    } finally {
+      realtime.close();
+    }
+  });
+
+  it("can unsubscribe all listeners from a msg", async () => {
+    let messageCount = 0;
+    const realtime = new RealTime({
+      url: "ws://127.0.0.1:8084",
+      project: "testproject",
+    });
+    try {
+      await realtime.once("connected");
+      const channel1 = realtime.getChannel("test-one");
+
+      channel1.subscribe("ch1", (_) => (messageCount += 1));
       channel1.subscribe("ch1", (_) => (messageCount += 1));
       channel1.subscribe("ch1", (_) => (messageCount += 1));
       channel1.subscribe("ch1", (_) => (messageCount += 1));
 
       await waitForDelivery(channel1, "ch1", "msg1");
 
-      channel1.unsubscribeAll("ch1");
+      channel1.unsubscribeAllFrom("ch1");
 
       await waitForDelivery(channel1, "ch1", "msg2");
 

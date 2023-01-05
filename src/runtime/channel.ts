@@ -40,7 +40,12 @@ export class Channel extends EventEmitter {
     this.maybeSendUnsubscribe();
   }
 
-  unsubscribeAll(msgName: string) {
+  unsubscribeAll() {
+    this.eventNames().forEach((event) => this.removeAllListeners(event));
+    this.maybeSendUnsubscribe();
+  }
+
+  unsubscribeAllFrom(msgName: string) {
     this.removeAllListeners(msgName);
     this.maybeSendUnsubscribe();
   }
