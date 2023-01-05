@@ -1,7 +1,6 @@
 import { RealTime, Channel } from "../node/index";
 import { WsTestServer } from "./mock.server";
 import * as proto from "../proto/server/v1/realtime";
-import { LogLevel } from "../runtime/logger";
 import { Encoding } from "../runtime";
 // TODO:
 // 5. Http endpoints
