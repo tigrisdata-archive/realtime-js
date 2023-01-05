@@ -5,8 +5,11 @@
     "lib": ["esnext", "dom"],
     "strict": true,
     "noImplicitAny": false,
+    "strictNullChecks": false,
     "esModuleInterop": true,
     "module": "commonjs",
     "outDir": "dist"
-  }
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "**/__tests__/*"]
 }
