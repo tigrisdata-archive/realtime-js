@@ -1,16 +1,30 @@
 import axios from "axios";
+import { reduceEachLeadingCommentRange } from "typescript";
 import { RealTime } from "../node/index";
+import { Encoding } from "../runtime";
+
+const sleep = (time: number) => {
+  return new Promise((resolve) => {
+    setTimeout(resolve, time);
+  });
+};
 
 describe("http endpoints", () => {
   let PROJECT: string = "";
   beforeEach(async () => {
     PROJECT = "test-project-1-" + Date.now();
-    const resp = await axios.post(
-      `http://127.0.0.1:8081/v1/projects/${PROJECT}/create`
-    );
-
-    // console.log("SS", resp.status);
-    // console.log("SS", resp.data);
+    try {
+      const resp = await axios.post(
+        `http://127.0.0.1:8081/v1/projects/${PROJECT}/create`
+      );
+      console.log("SS", resp.status);
+      console.log("SS", resp.data);
+    } catch (e) {
+      //@ts-ignore
+      console.log("SETUP failed", e);
+      throw e;
+    }
+    await sleep(3000);
   });
 
   afterEach(async () => {
@@ -22,7 +36,7 @@ describe("http endpoints", () => {
   it("should get list of channels", async () => {
     const realtime = new RealTime({
       url: "http://127.0.0.1:8083",
-      project: PROJECT,
+      project: "p1",
     });
 
     await realtime.once("connected");
@@ -56,41 +70,52 @@ describe("http endpoints", () => {
     const realtime = new RealTime({
       url: "http://127.0.0.1:8083",
       project: PROJECT,
+      encoding: Encoding.json,
+    });
+
+    const rt2 = new RealTime({
+      url: "http://127.0.0.1:8083",
+      project: PROJECT,
+      encoding: Encoding.msgpack,
     });
 
     await realtime.once("connected");
 
-    const ch = realtime.getChannel("test-ch");
+    const ch = realtime.getChannel("test-ch-1");
+    const ch2 = rt2.getChannel("test-ch-1");
+
+    ch2.attach();
 
     await new Promise<void>((done) => {
       ch.subscribe("first", (_msg) => {
+        ch2.publish("third", "third-msg");
         done();
       });
       ch.publish("first", "hello");
       ch.publish("second", "second-msg");
-      ch.publish("third", "third-msg");
     });
 
     try {
-      const channel = await realtime.http().channel("test-ch");
-
-      expect(channel).toEqual({ channel: "test-ch" });
-
-      //  NOT WORKING
-      const channelMessages = await realtime.http().channelMessages("test-ch");
-      expect(channelMessages).toContainEqual({
-        name: "first",
-        message: "hello1",
-      });
-
+      const channel = await realtime.http().channel("test-ch-1");
+      expect(channel).toEqual({ channel: "test-ch-1" });
+      const channelMessages = await realtime
+        .http()
+        .channelMessages("test-ch-1");
+      expect(channelMessages[0].data).toEqual("hello");
+      expect(channelMessages.length).toEqual(3);
+      expect(channelMessages[1].data).toEqual("second-msg");
+      expect(channelMessages[2].data).toEqual("third-msg");
       let devices = await realtime.http().channelSubscriptions("test-ch");
-      expect(devices.devices).toHaveLength(1);
+      expect(devices.devices).toHaveLength(2);
     } finally {
       realtime.close();
+      rt2.close();
+
+      await realtime.once("closed");
+      await rt2.once("closed");
     }
   });
 
-  // NOT WORKING
   it("publish message", async () => {
     const realtime = new RealTime({
       url: "http://127.0.0.1:8083",
@@ -98,11 +123,12 @@ describe("http endpoints", () => {
     });
 
     await realtime.once("connected");
-    let chan = "test-ch-" + Date.now();
+    let chan = "test-ch-1-" + Date.now();
 
     const ch = realtime.getChannel(chan);
     let msgWait1 = new Promise<void>((done) => {
       ch.subscribe("first", (msg) => {
+        console.log("sss111", msg);
         expect(msg).toEqual("from http");
         done();
       });
@@ -110,16 +136,23 @@ describe("http endpoints", () => {
 
     let msgWait2 = new Promise<void>((done) => {
       ch.subscribe("second", (msg) => {
+        console.log("sss", msg);
         expect(msg).toEqual({ val: "another from http" });
         done();
       });
     });
 
+    await sleep(400);
+
     try {
-      realtime.http().channelPublish(chan, [
+      await realtime.http().channelPublish(chan, [
         { name: "first", data: "from http" },
         { name: "second", data: { val: "another from http" } },
       ]);
+
+      let mg = await realtime.http().channelMessages(chan);
+
+      expect(mg.length).toEqual(2);
 
       await Promise.all([msgWait1, msgWait2]);
     } finally {
