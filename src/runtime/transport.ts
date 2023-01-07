@@ -128,9 +128,11 @@ export class Transport extends EventEmitter {
     this.ws.binaryType = "arraybuffer";
     this.setConnectionState("connecting");
 
-    // this.ws.onopen = () => this.restartHeartbeat();
-    // @ts-ignore
-    // this.ws.onerror = (err) => this.onError(err.message);
+    this.ws.onopen = () => this.restartHeartbeat();
+    this.ws.onerror = (err) => {
+      // @ts-ignore
+      this.onError(err.message);
+    };
     this.ws.onclose = (_event) => this.onClose();
     this.ws.onmessage = (msg: MessageEvent<Uint8Array>) =>
       this.onMessage(msg.data);

@@ -9,6 +9,7 @@ import {
 import Logger, { LogLevel } from "./logger";
 import { Channel, ChannelManager } from "./channel";
 import { Encoding } from "./messages";
+import { Http } from "./http";
 
 export { Channel } from "./channel";
 export { Encoding } from "./messages";
@@ -30,10 +31,11 @@ export interface RealTimeConfigInternal {
 export type RealTimeConfig = Omit<RealTimeConfigInternal, "platform">;
 
 export class RealTime {
-  private _config: RealTimeConfig;
+  private _config: RealTimeConfigInternal;
   private channelManager: ChannelManager;
   private transport: Transport;
   private logger: Logger;
+  private _http: Http;
   constructor(config: RealTimeConfigInternal) {
     this._config = Object.assign(
       {
@@ -45,15 +47,19 @@ export class RealTime {
     );
 
     this.logger = new Logger(config.loglevel);
+
     this.transport = new Transport({
       WebSocket: config.platform.WebSocket,
       heartbeatTimeout: 1000,
-      url: `${config.url}/v1/projects/${config.project}/realtime`,
+      url: `${config.url.replace("http", "ws")}/v1/projects/${
+        config.project
+      }/realtime`,
       logger: this.logger,
       autoconnect: this._config.autoconnect,
       encoding: this._config.encoding,
     });
 
+    this._http = new Http(this._config, this.logger);
     this.channelManager = new ChannelManager(this.transport, this.logger);
 
     this._config = config;
@@ -103,6 +109,10 @@ export class RealTime {
 
   socketId() {
     return this.transport.socketId();
+  }
+
+  http() {
+    return this._http;
   }
 }
 

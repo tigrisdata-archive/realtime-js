@@ -66,7 +66,12 @@ export function createMessageEvent(
 }
 
 export function createHeartbeatEvent(encoding: Encoding) {
-  return createRTMessage(encoding, proto.EventType.heartbeat, new Uint8Array());
+  // @ts-ignore
+  return createRTMessage(
+    encoding,
+    proto.EventType.heartbeat,
+    encodeMsg(encoding, {})
+  );
 }
 
 export function createDisconnectEvent(encoding: Encoding) {
@@ -143,7 +148,7 @@ export function createRTMessage(
 ): Uint8Array | string {
   const rt = {
     event_type,
-    event: event,
+    event,
   } as proto.RealTimeMessage;
 
   return encodeMsg(encoding, rt, encoding === Encoding.json);
