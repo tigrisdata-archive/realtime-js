@@ -12,7 +12,8 @@
     "update_api": "git submodule update --init --recursive && git submodule update --remote --recursive --rebase && git submodule foreach --recursive git reset --hard origin/main",
     "init_api": "git submodule update --init --recursive && git submodule update --remote --recursive --rebase",
     "proto": "rimraf src/proto && ./scripts/protoc.sh",
-    "clean": "rimraf ./src/proto && rimraf dist && rimraf node_modules"
+    "clean": "rimraf ./src/proto && rimraf dist && rimraf node_modules",
+    "addlicense": "addlicense -c \"Tigris Data, Inc.\" -ignore ./src/proto ./src"
   },
   "keywords": [],
   "author": "Tigris Data (https://www.tigrisdata.com/)",
